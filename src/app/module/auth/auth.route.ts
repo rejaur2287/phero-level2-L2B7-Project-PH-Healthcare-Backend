@@ -41,6 +41,7 @@ router.post(
 router.get(
   "/me",
   auth(Role.ADMIN, Role.DOCTOR, Role.PATIENT, Role.SUPER_ADMIN),
+  // Validate request middleware
   AuthController.getMe,
 );
 router.post("/refresh-token", AuthController.refreshToken);
