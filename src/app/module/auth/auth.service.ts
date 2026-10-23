@@ -2,6 +2,7 @@
 import bcrypt from "bcryptjs";
 import type { TokenPayload } from "google-auth-library";
 import type { JwtPayload, SignOptions } from "jsonwebtoken";
+import crypto from "crypto";
 import {
   AuthProvider,
   Role,
@@ -12,11 +13,14 @@ import { googleClient } from "../../lib/googleAuth";
 import { prisma } from "../../lib/prisma";
 import { jwtUtils } from "../../utils/jwt";
 import type {
+  IForgotPasswordPayload,
   IGoogleLoginPayload,
   ILoginUserPayload,
   IRegisterPatientPayload,
   IRequestUser,
+  IResetPasswordPayload,
 } from "./auth.interface";
+import { redisClient } from "../../lib/redis";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
   const { name, password, patient: patientData } = payload;
@@ -335,9 +339,50 @@ const googleLogin = async (payload: IGoogleLoginPayload) => {
   };
 };
 
-const forgotPassword = (payload: any) => {};
+const forgotPassword = async (payload: IForgotPasswordPayload) => {
+  const { email } = payload;
 
-const resetPassword = (payload: any) => {};
+  const isUserExists = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (!isUserExists) {
+    throw new Error("User Does Not Exists");
+  }
+
+  if (isUserExists.status === "BLOCKED") {
+    throw new Error("User is Blocked");
+  }
+
+  if (!isUserExists.emailVerified) {
+    throw new Error("User is not Verified");
+  }
+
+  if (isUserExists.isDeleted || isUserExists.status === "DELETED") {
+    throw new Error("User is Deleted");
+  }
+
+  // if (isUserExists.authProvider !== "CREDENTIAL") {
+  //   throw new Error("User Has Account With Google");
+  // }
+  if (isUserExists.googleId && isUserExists.authProvider === "GOOGLE") {
+    throw new Error("User Has Account With Google");
+  }
+
+  const otp = crypto.randomInt(100000, 1000000);
+
+  const key = `forgot-password-otp:${otp}`;
+  await redisClient.set(key, otp, {
+    expiration: {
+      type: "EX",
+      value: 5 * 60,
+    },
+  });
+};
+
+const resetPassword = (payload: IResetPasswordPayload) => {};
 
 export const AuthService = {
   registerPatient,
