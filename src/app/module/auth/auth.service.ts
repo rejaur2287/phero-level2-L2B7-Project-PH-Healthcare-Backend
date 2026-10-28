@@ -377,13 +377,16 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
     throw new Error("User Has Account With Google");
   }
 
-  const otp = crypto.randomInt(100000, 1000000);
+  const otp = crypto.randomInt(100000, 1000000).toString();
 
   const key = `forgot-password-otp:${otp}`;
+
+  const expirationSeconds = 5 * 60;
+
   await redisClient.set(key, otp, {
     expiration: {
       type: "EX",
-      value: 5 * 60,
+      value: expirationSeconds,
     },
   });
 
@@ -392,9 +395,13 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
     "src/app/templates/forgot-password.ejs",
   );
 
-  const html = await ejs.renderFile(templatePath, {
-    OTP: otp,
-  });
+  const templateData = {
+    name: isUserExists.name,
+    otp,
+    expirationMinutes: expirationSeconds / 60,
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
 
   await transporter.sendMail({
     from: config.email_sender,
@@ -461,12 +468,23 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 
   await redisClient.del([key]);
 
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templates/reset-password-success.ejs",
+  );
+  const templateData = {
+    name: isUserExists.name,
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
+
   await transporter.sendMail({
     from: config.email_sender,
     to: isUserExists.email,
     subject: "Password changed",
     // text: `Your OTP is ${otp}.`,
-    html: `<h1>Your Password is changed.</h1>`,
+    // html: `<h1>Your Password is changed.</h1>`,
+    html,
   });
 };
 
