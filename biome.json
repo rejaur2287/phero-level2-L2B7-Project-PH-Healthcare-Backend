@@ -30,7 +30,8 @@
         "noNonNullAssertion": "info",
         "useNodejsImportProtocol": "info"
       }
-    }
+    },
+    "includes": ["**", "!src/app/templates"]
   },
   "javascript": {
     "formatter": {

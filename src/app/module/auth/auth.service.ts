@@ -42,6 +42,60 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
     Number(config.bcrypt_salt_rounds),
   );
 
+  const expirationSeconds = 5 * 60;
+
+  const otpKey = `patient-registration-otp:${email}`;
+  const otpValue = crypto.randomInt(100000, 1000000).toString();
+
+  await redisClient.set(otpKey, otpValue, {
+    expiration: {
+      type: "EX",
+      value: expirationSeconds,
+    },
+  });
+
+  const patientRegistrationKey = `patient-registration-data:${email}`;
+  const redisUserDataPayload = {
+    name,
+    email,
+    password: hashedPassword,
+    patient: patientData,
+  };
+
+  await redisClient.set(
+    patientRegistrationKey,
+    JSON.stringify(redisUserDataPayload),
+    {
+      expiration: {
+        type: "EX",
+        value: expirationSeconds,
+      },
+    },
+  );
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templates/registration-user-otp.ejs",
+  );
+
+  const templateData = {
+    name,
+    email,
+    otpValue,
+    expirationMinutes: expirationSeconds / 60,
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
+
+  await transporter.sendMail({
+    from: config.email_sender,
+    to: email,
+    subject: "Forgot password",
+    // text: `Your OTP is ${otp}.`,
+    // html: `<h1>Your OTP is ${otp}.</h1>`,
+    html,
+  });
+
+  /*
   const createdUser = await prisma.user.create({
     data: {
       name,
@@ -88,6 +142,7 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
     accessToken,
     refreshToken,
   };
+  */
 };
 
 const loginUser = async (payload: ILoginUserPayload) => {
